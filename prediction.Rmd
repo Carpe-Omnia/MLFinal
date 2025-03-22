@@ -1,0 +1,102 @@
+---
+title: "Activity Prediction"
+author: '"Stone Cold" Tomaz Rodrigues'
+date: "2025-03-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Activity Prediction
+One thing that people regularly do is quantify how  much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
+
+#Loading Data 
+
+First we load the data as well as the two libraries we will be using.
+```{r loading, results="hide", message=FALSE, warning=FALSE}
+# Loading needed libraries
+library(caret)
+library(randomForest)
+
+# Loading training data
+if(!file.exists("pml-training.csv")) {
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+                destfile = "pml-training.csv")
+}
+training_data <- read.csv("pml-training.csv", na.strings = c("NA", ""))
+
+# Loading testing data
+if(!file.exists("pml-testing.csv")) {
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",
+                destfile = "pml-testing.csv")
+}
+
+```
+
+#Preprocessing
+
+Now that this data is loaded, we set the seed for reproducibility and read the data into memory. It then gets split into a training and testing set and preprocessed for predictions.
+```{r processing}
+validation_data <- read.csv("pml-testing.csv")
+
+# Setting seed for reproducibility
+set.seed(1234)
+
+# Splitting training data into training and testing sets
+inTrain <- createDataPartition(y = training_data$classe, p = 0.7, list = FALSE)
+training_set <- training_data[inTrain, ]
+testing_set <- training_data[-inTrain, ]
+
+# Converting 'classe' to factor
+training_set$classe <- as.factor(training_set$classe) ; testing_set$classe  <- as.factor(testing_set$classe)
+
+# Identifying columns with missing values in training set
+na_cols <- sapply(training_set, function(x) {sum(is.na(x))})
+cols_with_na <- names(na_cols[na_cols > 0])
+
+# Removing columns with missing values from all sets
+training_set <- training_set[, !names(training_set) %in% cols_with_na]
+testing_set <- testing_set[, !names(testing_set) %in% cols_with_na]
+validation_data <- validation_data[, !names(validation_data) %in% cols_with_na]
+
+# Removing unnecessary columns from all sets
+unnecessary_cols <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "new_window", "num_window")
+training_set <- training_set[, !names(training_set) %in% unnecessary_cols]
+testing_set <- testing_set[, !names(testing_set) %in% unnecessary_cols]
+validation_data <- validation_data[, !names(validation_data) %in% unnecessary_cols]
+```
+
+# Prediction
+
+Now that the data is ready to be worked with, we will train a random forest model on the dataset. Since I know very little about collecting motion data with accelerometers, I opted to steer clear of any feature creation in this section, instead choosing to let random forest do the work for us. I chose to use Random Forest since it usually does a great job with classification problems and is tunable to a great degree.
+```{r prediction }
+# Training Random Forest model
+model <- randomForest(classe ~ ., data = training_set, ntree = 100)
+
+# Making predictions on testing set
+predictions_testing <- predict(model, testing_set)
+
+# Evaluating model on testing set
+confusionMatrix_testing <- confusionMatrix(predictions_testing, testing_set$classe)
+modelAccuracy <- confusionMatrix_testing$overall[[1]]
+cat("Model Accuracy on Testing Set:", modelAccuracy, "\n")
+```
+# Results
+As you can see above, the random forest model did quite a nice job of predciting classe value. I thought about trying to tune the ntree hyperparameter from 100 but since it did so well with that value I figured it wasn't worth the trouble.
+
+#Quiz
+Here we take the predictions for the final evaluation set and output to them to quiz.csv. Hope I get a good grade!
+```{r quiz}
+# Making predictions on validation set
+predictions_validation <- predict(model, validation_data)
+
+# Writing predictions to CSV file
+write.csv(predictions_validation, file = "quiz.csv", row.names = FALSE)
+
+# Printing predictions for validation set
+cat("Predictions for Validation Set:\n")
+print(predictions_validation)
+```
+
